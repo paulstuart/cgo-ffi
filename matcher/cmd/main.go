@@ -17,6 +17,7 @@ import (
 	gomatcher "github.com/paulstuart/cgo-ffi/matcher/go"
 	"github.com/paulstuart/cgo-ffi/matcher/testdata"
 	"github.com/paulstuart/cgo-ffi/matcher/vectorscan"
+	wasmvs "github.com/paulstuart/cgo-ffi/matcher/wasm/host"
 )
 
 // Matcher interface for comparing implementations
@@ -107,6 +108,9 @@ func main() {
 
 	// Full throughput comparison
 	runThroughputComparison()
+
+	// WASM comparison (with literal patterns only)
+	runWasmComparison()
 }
 
 func runComparison(patternCount int) {
@@ -384,4 +388,153 @@ func findVsHitPositions(m *vectorscan.VsMatcher, patternCount int) (first, middl
 	}
 
 	return first, middle, last
+}
+
+func runWasmComparison() {
+	fmt.Printf("╔══════════════════════════════════════════════════════════════════════════════╗\n")
+	fmt.Printf("║  WASM VECTORSCAN COMPARISON (literal patterns only)                          ║\n")
+	fmt.Printf("╚══════════════════════════════════════════════════════════════════════════════╝\n\n")
+
+	// Generate simple literal patterns (WASM version has limitations with complex regex)
+	patternCount := 50
+	patterns := make([]string, patternCount)
+	for i := 0; i < patternCount; i++ {
+		patterns[i] = fmt.Sprintf("malware%d", i)
+	}
+
+	// Generate test inputs
+	testInputs := make([]string, 1000)
+	for i := 0; i < 1000; i++ {
+		if i%20 == 0 {
+			testInputs[i] = fmt.Sprintf("file_malware%d.exe", rand.Intn(patternCount))
+		} else {
+			testInputs[i] = fmt.Sprintf("C:\\Windows\\System32\\file%d.dll", i)
+		}
+	}
+
+	numScans := 5
+
+	// Go Matcher
+	goMatcher, err := gomatcher.NewGoMatcher(patterns)
+	if err != nil {
+		fmt.Printf("Go ERROR: %v\n", err)
+		return
+	}
+	defer goMatcher.Close()
+
+	// Native Vectorscan Matcher
+	vsMatcher, err := vectorscan.NewVsMatcher(patterns)
+	if err != nil {
+		fmt.Printf("Vectorscan ERROR: %v\n", err)
+		return
+	}
+	defer vsMatcher.Close()
+
+	// WASM Vectorscan Matcher
+	wasmStart := time.Now()
+	wasmMatcher, err := wasmvs.NewWasmMatcher(patterns)
+	if err != nil {
+		fmt.Printf("WASM ERROR: %v\n", err)
+		return
+	}
+	defer wasmMatcher.Close()
+	wasmInitTime := time.Since(wasmStart)
+	fmt.Printf("  WASM initialization time: %v\n\n", wasmInitTime)
+
+	// Warm up
+	for _, f := range testInputs[:10] {
+		goMatcher.Match(f)
+		vsMatcher.Match(f)
+		wasmMatcher.Match(f)
+	}
+
+	// Benchmark Go
+	var goTimes []time.Duration
+	var goMatches int
+	for i := 0; i < numScans; i++ {
+		matches := 0
+		start := time.Now()
+		for _, f := range testInputs {
+			if goMatcher.Match(f) >= 0 {
+				matches++
+			}
+		}
+		goTimes = append(goTimes, time.Since(start))
+		if i == 0 {
+			goMatches = matches
+		}
+	}
+
+	// Benchmark Native Vectorscan
+	var vsTimes []time.Duration
+	var vsMatches int
+	for i := 0; i < numScans; i++ {
+		matches := 0
+		start := time.Now()
+		for _, f := range testInputs {
+			if vsMatcher.Match(f) >= 0 {
+				matches++
+			}
+		}
+		vsTimes = append(vsTimes, time.Since(start))
+		if i == 0 {
+			vsMatches = matches
+		}
+	}
+
+	// Benchmark WASM Vectorscan
+	var wasmTimes []time.Duration
+	var wasmMatches int
+	for i := 0; i < numScans; i++ {
+		matches := 0
+		start := time.Now()
+		for _, f := range testInputs {
+			if wasmMatcher.Match(f) >= 0 {
+				matches++
+			}
+		}
+		wasmTimes = append(wasmTimes, time.Since(start))
+		if i == 0 {
+			wasmMatches = matches
+		}
+	}
+
+	// Calculate stats
+	slices.Sort(goTimes)
+	slices.Sort(vsTimes)
+	slices.Sort(wasmTimes)
+
+	var goTotal, vsTotal, wasmTotal time.Duration
+	for i := 0; i < numScans; i++ {
+		goTotal += goTimes[i]
+		vsTotal += vsTimes[i]
+		wasmTotal += wasmTimes[i]
+	}
+	goAvg := goTotal / time.Duration(numScans)
+	vsAvg := vsTotal / time.Duration(numScans)
+	wasmAvg := wasmTotal / time.Duration(numScans)
+
+	goFilesPerSec := float64(len(testInputs)) / goAvg.Seconds()
+	vsFilesPerSec := float64(len(testInputs)) / vsAvg.Seconds()
+	wasmFilesPerSec := float64(len(testInputs)) / wasmAvg.Seconds()
+
+	fmt.Printf("  Patterns: %d (literal only)\n", patternCount)
+	fmt.Printf("  Test inputs: %d\n", len(testInputs))
+	fmt.Printf("  Scans: %d\n\n", numScans)
+
+	fmt.Println("  ┌─────────────────────┬──────────────┬──────────────┬────────────┐")
+	fmt.Println("  │ Implementation      │ Avg Time     │ Min Time     │ Files/sec  │")
+	fmt.Println("  ├─────────────────────┼──────────────┼──────────────┼────────────┤")
+	fmt.Printf("  │ Pure Go             │ %12v │ %12v │ %10.0f │\n",
+		goAvg.Round(time.Microsecond), goTimes[0].Round(time.Microsecond), goFilesPerSec)
+	fmt.Printf("  │ Native Vectorscan   │ %12v │ %12v │ %10.0f │\n",
+		vsAvg.Round(time.Microsecond), vsTimes[0].Round(time.Microsecond), vsFilesPerSec)
+	fmt.Printf("  │ WASM Vectorscan     │ %12v │ %12v │ %10.0f │\n",
+		wasmAvg.Round(time.Microsecond), wasmTimes[0].Round(time.Microsecond), wasmFilesPerSec)
+	fmt.Println("  └─────────────────────┴──────────────┴──────────────┴────────────┘")
+
+	fmt.Printf("\n  Native vs Go speedup:  %.1fx\n", goAvg.Seconds()/vsAvg.Seconds())
+	fmt.Printf("  WASM vs Go speedup:    %.1fx\n", goAvg.Seconds()/wasmAvg.Seconds())
+	fmt.Printf("  Native vs WASM:        %.1fx faster\n", wasmAvg.Seconds()/vsAvg.Seconds())
+	fmt.Printf("\n  Matches: Go=%d, Native=%d, WASM=%d\n\n", goMatches, vsMatches, wasmMatches)
 }

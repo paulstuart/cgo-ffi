@@ -1,0 +1,31 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -127,10 +127,17 @@ CHECK_C_SOURCE_COMPILES("int main(){ asm(\"vse64.v v1, (x0)\"); return 0; }" ARC
+ CHECK_C_SOURCE_COMPILES("int main(){ asm(\"vshl.i8 d1, d2, #1\"); return 0; }" ARCH_ARM32)
+ CHECK_C_SOURCE_COMPILES("int main(){ asm(\"vand.16b v1, v2, v3\"); return 0; }" ARCH_AARCH64)
+ CHECK_C_SOURCE_COMPILES("int main(){ asm(\"vbpermq 1, 2, 3\"); return 0; }" ARCH_PPC64EL)
++# WASM/Emscripten support - use SIMDe emulation
++if (EMSCRIPTEN)
++    set(ARCH_WASM32 TRUE)
++    message(STATUS "Building for WebAssembly with SIMDe emulation")
++endif()
+
+ # allow override - e.g. for build SSE2 SIMDE library on x86_64
+-if(ARCH_X86_64 AND BUILD_SSE2_SIMDE AND NOT FAT_RUNTIME)
++if((ARCH_X86_64 AND BUILD_SSE2_SIMDE AND NOT FAT_RUNTIME) OR ARCH_WASM32)
+     set(SIMDE_BACKEND True)
++    message(STATUS "Using SIMDe backend for SIMD emulation")
+ endif()
+ if(SIMDE_BACKEND)
+     include (${CMAKE_MODULE_PATH}/simde.cmake)
+@@ -139,7 +146,9 @@ elseif (ARCH_IA32 OR ARCH_X86_64)
+     set(ARCH_C_FLAGS "-msse4.2")
+ elseif (ARCH_ARM32 OR ARCH_AARCH64)
+     set(ARCH_C_FLAGS "-march=armv8-a")
+-elseif (ARCH_PPC64EL)
++elseif (ARCH_WASM32)
++    set(ARCH_C_FLAGS "")
++elseif (ARCH_PPC64EL)
+     set(ARCH_C_FLAGS "-mcpu=power8 -mtune=power8")
+ else()
+     message(FATAL_ERROR "Unsupported platform")

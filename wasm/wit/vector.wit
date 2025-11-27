@@ -1,0 +1,45 @@
+// vector.wit - WebAssembly Interface Types definition for vector operations
+//
+// This defines a shared interface that can be implemented by Rust, TinyGo, or C
+// and consumed by a Go host via wasmtime-go.
+
+package ffi:vector@0.1.0;
+
+/// Vector operations interface
+interface ops {
+    /// Sum all elements in a f64 array
+    /// Uses pre-allocated buffer at known offset
+    sum: func(len: u32) -> f64;
+
+    /// Dot product of two f64 arrays
+    /// Uses pre-allocated buffers A and B at known offsets
+    dot: func(len: u32) -> f64;
+
+    /// Element-wise multiply: result[i] = a[i] * b[i]
+    /// Reads from buffers A and B, writes to result buffer
+    mul: func(len: u32);
+
+    /// Scale array in-place: arr[i] *= scalar
+    /// Operates on buffer A
+    scale: func(scalar: f64, len: u32);
+
+    /// SIMD-optimized sum (implementation may fall back to regular sum)
+    sum-simd: func(len: u32) -> f64;
+
+    /// Get the offset of input buffer A in linear memory
+    get-buffer-a-offset: func() -> u32;
+
+    /// Get the offset of input buffer B in linear memory
+    get-buffer-b-offset: func() -> u32;
+
+    /// Get the offset of result buffer in linear memory
+    get-result-offset: func() -> u32;
+
+    /// Get the capacity of pre-allocated buffers (in f64 elements)
+    get-capacity: func() -> u32;
+}
+
+/// The world that guests implement
+world vector-world {
+    export ops;
+}

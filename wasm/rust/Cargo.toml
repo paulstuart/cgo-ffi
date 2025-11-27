@@ -1,0 +1,15 @@
+[package]
+name = "vector-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+# No dependencies needed for core module approach
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

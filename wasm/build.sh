@@ -31,6 +31,9 @@ build_rust() {
         rustup target add wasm32-unknown-unknown
     fi
 
+    # Enable SIMD and other optimizations via RUSTFLAGS
+    export RUSTFLAGS="-C target-feature=+simd128"
+
     if ! cargo build --release --target wasm32-unknown-unknown; then
         echo "ERROR: Rust build failed"
         cd ..
@@ -40,7 +43,13 @@ build_rust() {
     # Copy to expected location
     cp target/wasm32-unknown-unknown/release/vector_wasm.wasm vector.wasm
 
-    echo "Rust WASM built: rust/vector.wasm"
+    # Run wasm-opt if available for additional optimization
+    if command -v wasm-opt &> /dev/null; then
+        echo "Running wasm-opt..."
+        wasm-opt -O3 --enable-simd vector.wasm -o vector.wasm
+    fi
+
+    echo "Rust WASM built: rust/vector.wasm ($(stat -f%z vector.wasm 2>/dev/null || stat -c%s vector.wasm 2>/dev/null) bytes)"
     cd ..
     return 0
 }
@@ -55,13 +64,24 @@ build_tinygo() {
 
     cd tinygo
 
-    if ! tinygo build -o vector.wasm -target=wasi -opt=2 -no-debug main.go; then
+    # Optimization flags:
+    # -opt=2        : Maximum optimization
+    # -no-debug     : No debug info
+    # -scheduler=none : No goroutine scheduler (we don't use goroutines)
+    # -gc=leaking   : No GC (we never free memory)
+    if ! tinygo build -o vector.wasm -target=wasi -opt=2 -no-debug -scheduler=none -gc=leaking main.go; then
         echo "ERROR: TinyGo build failed"
         cd ..
         return 1
     fi
 
-    echo "TinyGo WASM built: tinygo/vector.wasm"
+    # Run wasm-opt if available for additional optimization
+    if command -v wasm-opt &> /dev/null; then
+        echo "Running wasm-opt..."
+        wasm-opt -O3 vector.wasm -o vector.wasm
+    fi
+
+    echo "TinyGo WASM built: tinygo/vector.wasm ($(stat -f%z vector.wasm 2>/dev/null || stat -c%s vector.wasm 2>/dev/null) bytes)"
     cd ..
     return 0
 }

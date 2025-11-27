@@ -99,27 +99,59 @@ pub extern "C" fn scale(scalar: f64, len: u32) {
 #[no_mangle]
 pub extern "C" fn sum_simd(len: u32) -> f64 {
     let len = (len as usize).min(CAPACITY);
-    // 4-way unrolling for better auto-vectorization
-    let mut sum0 = 0.0;
-    let mut sum1 = 0.0;
-    let mut sum2 = 0.0;
-    let mut sum3 = 0.0;
 
-    unsafe {
-        let mut i = 0;
-        while i + 3 < len {
-            sum0 += BUFFER_A.get(i);
-            sum1 += BUFFER_A.get(i + 1);
-            sum2 += BUFFER_A.get(i + 2);
-            sum3 += BUFFER_A.get(i + 3);
-            i += 4;
-        }
-        while i < len {
-            sum0 += BUFFER_A.get(i);
-            i += 1;
+    #[cfg(target_feature = "simd128")]
+    {
+        use core::arch::wasm32::*;
+
+        unsafe {
+            let ptr = BUFFER_A.as_ptr();
+            let mut acc = f64x2_splat(0.0);
+            let mut i = 0;
+
+            // Process 2 f64s at a time using SIMD
+            while i + 1 < len {
+                let v = v128_load(ptr.add(i) as *const v128);
+                acc = f64x2_add(acc, v);
+                i += 2;
+            }
+
+            // Reduce SIMD lanes
+            let mut sum = f64x2_extract_lane::<0>(acc) + f64x2_extract_lane::<1>(acc);
+
+            // Handle remainder
+            while i < len {
+                sum += BUFFER_A.get(i);
+                i += 1;
+            }
+            sum
         }
     }
-    sum0 + sum1 + sum2 + sum3
+
+    #[cfg(not(target_feature = "simd128"))]
+    {
+        // Fallback: 4-way unrolling for auto-vectorization
+        let mut sum0 = 0.0;
+        let mut sum1 = 0.0;
+        let mut sum2 = 0.0;
+        let mut sum3 = 0.0;
+
+        unsafe {
+            let mut i = 0;
+            while i + 3 < len {
+                sum0 += BUFFER_A.get(i);
+                sum1 += BUFFER_A.get(i + 1);
+                sum2 += BUFFER_A.get(i + 2);
+                sum3 += BUFFER_A.get(i + 3);
+                i += 4;
+            }
+            while i < len {
+                sum0 += BUFFER_A.get(i);
+                i += 1;
+            }
+        }
+        sum0 + sum1 + sum2 + sum3
+    }
 }
 
 #[no_mangle]

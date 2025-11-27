@@ -10,7 +10,7 @@
 #   make bench-wasm - Run only WASM benchmarks
 #   make clean      - Clean build artifacts
 
-.PHONY: all build wasm test bench bench-cgo bench-wasm clean help demo wasmx
+.PHONY: all build wasm test bench bench-cgo bench-wasm clean help demo wasmx wasmg
 
 all: build
 
@@ -38,6 +38,9 @@ wasm-rust:
 wasm-tinygo:
 	chmod +x wasm/build.sh
 	cd wasm && ./build.sh tinygo
+
+wasmg:
+	GOOS=js GOARCH=wasm go build -o std.wasm ./wasm/tinygo
 
 wasm-c:
 	chmod +x wasm/build.sh

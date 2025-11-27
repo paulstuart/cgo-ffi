@@ -8,10 +8,9 @@
 package host
 
 import (
-	"encoding/binary"
 	"fmt"
-	"math"
 	"sync"
+	"unsafe"
 
 	"github.com/bytecodealliance/wasmtime-go/v39"
 )
@@ -227,20 +226,21 @@ func (w *WasmVectorOps) Capacity() int {
 }
 
 // copyToWasm copies float64 slice to WASM linear memory at the given offset.
+// Uses unsafe pointer casting for maximum performance (valid since f64 is same on both sides).
 func (w *WasmVectorOps) copyToWasm(data []float64, offset uint32) {
 	mem := w.memory.UnsafeData(w.store)
-	for i, v := range data {
-		binary.LittleEndian.PutUint64(mem[offset+uint32(i)*8:], math.Float64bits(v))
-	}
+	dst := mem[offset : offset+uint32(len(data)*8)]
+	src := unsafe.Slice((*byte)(unsafe.Pointer(&data[0])), len(data)*8)
+	copy(dst, src)
 }
 
 // copyFromWasm copies float64 values from WASM linear memory.
+// Uses unsafe pointer casting for maximum performance.
 func (w *WasmVectorOps) copyFromWasm(dst []float64, offset uint32) {
 	mem := w.memory.UnsafeData(w.store)
-	for i := range dst {
-		bits := binary.LittleEndian.Uint64(mem[offset+uint32(i)*8:])
-		dst[i] = math.Float64frombits(bits)
-	}
+	src := mem[offset : offset+uint32(len(dst)*8)]
+	dstBytes := unsafe.Slice((*byte)(unsafe.Pointer(&dst[0])), len(dst)*8)
+	copy(dstBytes, src)
 }
 
 // Sum returns the sum of all elements.

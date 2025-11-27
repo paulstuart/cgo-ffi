@@ -12,10 +12,62 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/paulstuart/cgo-ffi/wasm/host"
 )
+
+// stats holds timing statistics for a benchmark
+type stats struct {
+	min   time.Duration
+	avg   time.Duration
+	p95   time.Duration
+	total time.Duration
+	n     int
+}
+
+// benchmark runs a function n times and collects timing statistics
+func benchmark(n int, fn func()) stats {
+	times := make([]time.Duration, n)
+
+	for i := 0; i < n; i++ {
+		start := time.Now()
+		fn()
+		times[i] = time.Since(start)
+	}
+
+	// Sort for percentile calculation
+	slices.Sort(times)
+
+	// Calculate statistics
+	var total time.Duration
+	for _, t := range times {
+		total += t
+	}
+
+	p95idx := int(float64(n) * 0.95)
+	if p95idx >= n {
+		p95idx = n - 1
+	}
+
+	return stats{
+		min:   times[0],
+		avg:   total / time.Duration(n),
+		p95:   times[p95idx],
+		total: total,
+		n:     n,
+	}
+}
+
+func (s stats) String() string {
+	return fmt.Sprintf("avg=%v  min=%v  p95=%v  (n=%d, total=%v)",
+		s.avg.Round(time.Microsecond),
+		s.min.Round(time.Microsecond),
+		s.p95.Round(time.Microsecond),
+		s.n,
+		s.total.Round(time.Millisecond))
+}
 
 func main() {
 	fmt.Println("=== WASM Vector Operations Demo ===")
@@ -54,7 +106,7 @@ func main() {
 		data[i] = rand.Float64() * 100
 		data2[i] = rand.Float64() * 100
 	}
-	fmt.Printf("Test data: %d float64 elements\n\n", size)
+	fmt.Printf("Test data: %d float64 elements, 1000 iterations\n\n", size)
 
 	// Run each module
 	for _, name := range requested {
@@ -89,36 +141,30 @@ func runModule(name, path string, data, data2 []float64) {
 	}
 	defer ops.Close()
 	fmt.Printf("  Load time: %v\n", time.Since(start))
-	fmt.Printf("  Capacity: %d elements\n", ops.Capacity())
+	fmt.Printf("  Capacity:  %d elements\n", ops.Capacity())
 
 	iterations := 1000
 
 	// Sum
-	start = time.Now()
 	var sumResult float64
-	for i := 0; i < iterations; i++ {
+	sumStats := benchmark(iterations, func() {
 		sumResult = ops.Sum(data)
-	}
-	sumTime := time.Since(start)
-	fmt.Printf("  Sum:      %v (%d iterations), result=%.2f\n", sumTime, iterations, sumResult)
+	})
+	fmt.Printf("  Sum:       %s  result=%.2f\n", sumStats, sumResult)
 
 	// Sum SIMD
-	start = time.Now()
 	var simdResult float64
-	for i := 0; i < iterations; i++ {
+	simdStats := benchmark(iterations, func() {
 		simdResult = ops.SumSIMD(data)
-	}
-	simdTime := time.Since(start)
-	fmt.Printf("  Sum SIMD: %v (%d iterations), result=%.2f\n", simdTime, iterations, simdResult)
+	})
+	fmt.Printf("  Sum SIMD:  %s  result=%.2f\n", simdStats, simdResult)
 
 	// Dot product
-	start = time.Now()
 	var dotResult float64
-	for i := 0; i < iterations; i++ {
+	dotStats := benchmark(iterations, func() {
 		dotResult = ops.Dot(data, data2)
-	}
-	dotTime := time.Since(start)
-	fmt.Printf("  Dot:      %v (%d iterations), result=%.2f\n", dotTime, iterations, dotResult)
+	})
+	fmt.Printf("  Dot:       %s  result=%.2f\n", dotStats, dotResult)
 
 	fmt.Println()
 }
@@ -127,22 +173,18 @@ func runGoReference(data, data2 []float64) {
 	iterations := 1000
 
 	// Sum
-	start := time.Now()
 	var sumResult float64
-	for i := 0; i < iterations; i++ {
+	sumStats := benchmark(iterations, func() {
 		sumResult = goSum(data)
-	}
-	sumTime := time.Since(start)
-	fmt.Printf("  Sum:      %v (%d iterations), result=%.2f\n", sumTime, iterations, sumResult)
+	})
+	fmt.Printf("  Sum:       %s  result=%.2f\n", sumStats, sumResult)
 
 	// Dot
-	start = time.Now()
 	var dotResult float64
-	for i := 0; i < iterations; i++ {
+	dotStats := benchmark(iterations, func() {
 		dotResult = goDot(data, data2)
-	}
-	dotTime := time.Since(start)
-	fmt.Printf("  Dot:      %v (%d iterations), result=%.2f\n", dotTime, iterations, dotResult)
+	})
+	fmt.Printf("  Dot:       %s  result=%.2f\n", dotStats, dotResult)
 
 	fmt.Println()
 }

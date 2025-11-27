@@ -8,9 +8,10 @@
 #   make bench      - Run all benchmarks
 #   make bench-cgo  - Run only cgo benchmarks
 #   make bench-wasm - Run only WASM benchmarks
+#   make matchx     - Build all regexp matcher
 #   make clean      - Clean build artifacts
 
-.PHONY: all build wasm test bench bench-cgo bench-wasm clean help demo wasmx wasmg
+.PHONY: all build wasm test bench bench-cgo bench-wasm clean help demo wasmx wasmg matchx
 
 all: build
 
@@ -25,6 +26,10 @@ demo:
 # Build WASM runner
 wasmx:
 	go build -o wasm/wasmx ./wasm/cmd
+
+# Build WASM runner
+matchx:
+	go build -o matcher/matchx ./matcher/cmd
 
 # Build all WASM modules
 wasm:

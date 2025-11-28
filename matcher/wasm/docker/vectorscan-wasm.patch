@@ -1,0 +1,50 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -129,6 +129,20 @@ include (${CMAKE_MODULE_PATH}/platform.cmake)
+ # Detect OS and if Fat Runtime is available
+ include (${CMAKE_MODULE_PATH}/osdetection.cmake)
+
++# WASM/Emscripten support - force SIMDe backend
++if(EMSCRIPTEN)
++    set(ARCH_WASM32 TRUE)
++    set(ARCH_32_BIT TRUE)
++    set(SIMDE_BACKEND TRUE)
++    # Clear architecture flags that aren't valid for WASM
++    set(ARCH_C_FLAGS "")
++    set(ARCH_CXX_FLAGS "")
++    set(GNUCC_ARCH "")
++    set(GNUCC_TUNE "")
++    # Disable warnings-as-errors for unsupported flags
++    set(EXTRA_C_FLAGS "-Wno-error=unused-command-line-argument")
++    set(EXTRA_CXX_FLAGS "-Wno-error=unused-command-line-argument")
++    message(STATUS "Building for WebAssembly with SIMDe emulation")
++endif()
++
+ if(ARCH_X86_64 AND BUILD_SSE2_SIMDE AND NOT FAT_RUNTIME)
+     set(SIMDE_BACKEND True)
+ endif()
+@@ -174,7 +188,7 @@ include (${CMAKE_MODULE_PATH}/archdetect.cmake)
+
+ include (${CMAKE_MODULE_PATH}/sanitize.cmake)
+
+-if (NOT FAT_RUNTIME)
++if (NOT FAT_RUNTIME AND NOT EMSCRIPTEN)
+     if (GNUCC_TUNE)
+         message(STATUS "GNUCC_TUNE is set")
+         set(ARCH_C_FLAGS "-${ARCH_FLAG}=${GNUCC_ARCH} -${TUNE_FLAG}=${GNUCC_TUNE}")
+@@ -186,6 +200,13 @@ if (NOT FAT_RUNTIME)
+     endif()
+ endif()
+
++# Clear arch flags for WASM builds
++if (EMSCRIPTEN)
++    set(ARCH_C_FLAGS "")
++    set(ARCH_CXX_FLAGS "")
++    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error=unused-command-line-argument -Wno-error=pass-failed -Wno-pass-failed")
++    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=unused-command-line-argument -Wno-error=pass-failed -Wno-pass-failed")
++endif()
++
+ # remove CMake's idea of optimisation
+ foreach (CONFIG ${CMAKE_BUILD_TYPE} ${CMAKE_CONFIGURATION_TYPES})
+     string(REGEX REPLACE "-O[^ ]*" "" CMAKE_C_FLAGS_${CONFIG} "${CMAKE_C_FLAGS_${CONFIG}}")

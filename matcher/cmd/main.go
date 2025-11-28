@@ -393,24 +393,12 @@ func findVsHitPositions(m *vectorscan.VsMatcher, patternCount int) (first, middl
 func runWasmComparison() {
 	fmt.Printf("╔══════════════════════════════════════════════════════════════════════════════╗\n")
 	fmt.Printf("║  WASM VECTORSCAN COMPARISON (literal patterns only)                          ║\n")
+	fmt.Printf("║  Note: WASM backend only supports simple literals, not full regex            ║\n")
 	fmt.Printf("╚══════════════════════════════════════════════════════════════════════════════╝\n\n")
 
-	// Generate simple literal patterns (WASM version has limitations with complex regex)
-	patternCount := 50
-	patterns := make([]string, patternCount)
-	for i := 0; i < patternCount; i++ {
-		patterns[i] = fmt.Sprintf("malware%d", i)
-	}
-
-	// Generate test inputs
-	testInputs := make([]string, 1000)
-	for i := 0; i < 1000; i++ {
-		if i%20 == 0 {
-			testInputs[i] = fmt.Sprintf("file_malware%d.exe", rand.Intn(patternCount))
-		} else {
-			testInputs[i] = fmt.Sprintf("C:\\Windows\\System32\\file%d.dll", i)
-		}
-	}
+	// Use SimpleMalwarePatterns which work with WASM (literals only)
+	patterns := testdata.SimpleMalwarePatterns
+	testInputs := testdata.TestFilenames
 
 	numScans := 5
 
@@ -518,7 +506,7 @@ func runWasmComparison() {
 	vsFilesPerSec := float64(len(testInputs)) / vsAvg.Seconds()
 	wasmFilesPerSec := float64(len(testInputs)) / wasmAvg.Seconds()
 
-	fmt.Printf("  Patterns: %d (literal only)\n", patternCount)
+	fmt.Printf("  Patterns: %d (simple literals from SimpleMalwarePatterns)\n", len(patterns))
 	fmt.Printf("  Test inputs: %d\n", len(testInputs))
 	fmt.Printf("  Scans: %d\n\n", numScans)
 

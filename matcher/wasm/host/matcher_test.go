@@ -72,31 +72,25 @@ func TestWasmMatcher_Match(t *testing.T) {
 }
 
 func TestWasmMatcher_MalwarePatterns(t *testing.T) {
-	// Test with simple literal patterns that work in WASM
-	patterns := []string{
-		"mimikatz",
-		"ransomware",
-		"trojan",
-		"keylogger",
-		"backdoor",
-	}
-
-	m, err := NewWasmMatcher(patterns)
+	// WASM Vectorscan only supports simple literal patterns.
+	// Use SimpleMalwarePatterns which contains only literals.
+	m, err := NewWasmMatcher(testdata.SimpleMalwarePatterns)
 	if err != nil {
 		t.Fatalf("NewWasmMatcher failed with malware patterns: %v", err)
 	}
 	defer m.Close()
 
-	t.Logf("Compiled %d malware patterns", m.PatternCount())
+	t.Logf("Compiled %d simple malware patterns", m.PatternCount())
 
-	// Test some known malicious files
+	// Test some known malicious files (Unix paths)
 	maliciousTests := []struct {
 		file      string
 		shouldHit bool
 	}{
-		{`C:\Users\Public\Downloads\mimikatz.exe`, true},
-		{`C:\temp\ransomware_kit.zip`, true},
-		{`C:\Windows\System32\notepad.exe`, false},
+		{`/tmp/downloads/mimikatz.bin`, true},
+		{`/tmp/ransomware_kit.tar.gz`, true},
+		{`/home/user/.cache/cobalt strike`, true},
+		{`/usr/bin/ls`, false},
 		{`/usr/bin/bash`, false},
 	}
 
@@ -125,7 +119,7 @@ func benchmarkWasmMatch(b *testing.B, patternCount int) {
 	}
 	defer m.Close()
 
-	input := `C:\Windows\System32\notepad.exe`
+	input := `/usr/bin/notepad`
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -134,24 +128,16 @@ func benchmarkWasmMatch(b *testing.B, patternCount int) {
 }
 
 func BenchmarkWasmMatcher_ScanAllFiles(b *testing.B) {
-	// Use simple patterns
-	patterns := make([]string, 50)
-	for i := 0; i < 50; i++ {
-		patterns[i] = fmt.Sprintf("malware%d", i)
-	}
-
-	m, err := NewWasmMatcher(patterns)
+	// Use SimpleMalwarePatterns which work with WASM backend
+	m, err := NewWasmMatcher(testdata.SimpleMalwarePatterns)
 	if err != nil {
 		b.Fatalf("NewWasmMatcher failed: %v", err)
 	}
 	defer m.Close()
 
-	// Use a subset of test filenames
-	testFiles := testdata.TestFilenames[:100]
-
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		for _, f := range testFiles {
+		for _, f := range testdata.TestFilenames {
 			m.Match(f)
 		}
 	}

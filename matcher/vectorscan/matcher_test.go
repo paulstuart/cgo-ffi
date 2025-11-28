@@ -105,14 +105,14 @@ func TestVsMatcher_MalwarePatterns(t *testing.T) {
 	size, _ := m.DatabaseSize()
 	t.Logf("Database size: %d bytes (%.2f KB)", size, float64(size)/1024)
 
-	// Test some known malicious files
+	// Test some known malicious files (Unix paths)
 	maliciousTests := []struct {
 		file      string
 		shouldHit bool
 	}{
-		{`C:\Users\Public\Downloads\mimikatz.exe`, true},
-		{`C:\Users\jsmith\Downloads\invoice_march.pdf.exe`, true},
-		{`C:\Windows\System32\notepad.exe`, false},
+		{`/tmp/downloads/mimikatz.bin`, true},
+		{`/home/user/downloads/invoice_march.pdf.sh`, true},
+		{`/usr/bin/ls`, false},
 		{`/usr/bin/bash`, false},
 	}
 
@@ -143,7 +143,7 @@ func benchmarkVsMatch(b *testing.B, patternCount int) {
 	defer m.Close()
 
 	// Use a benign file that won't match (worst case for sequential, same for Vectorscan)
-	input := `C:\Windows\System32\notepad.exe`
+	input := `/usr/bin/notepad`
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -160,7 +160,7 @@ func BenchmarkVsMatcher_Match_FirstPattern(b *testing.B) {
 	defer m.Close()
 
 	// File that matches early pattern (emotet - pattern 0)
-	input := `C:\Users\marketing\AppData\Local\Temp\emotet_12345.exe`
+	input := `/tmp/cache/emotet_12345.bin`
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -176,7 +176,7 @@ func BenchmarkVsMatcher_Match_LastPattern(b *testing.B) {
 	defer m.Close()
 
 	// File that matches late pattern (crack/keygen - pattern ~246)
-	input := `C:\Downloads\crack_photoshop_2024.exe`
+	input := `/home/user/downloads/crack_photoshop_2024.bin`
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -192,7 +192,7 @@ func BenchmarkVsMatcher_Match_NoMatch(b *testing.B) {
 	defer m.Close()
 
 	// Benign file - no match
-	input := `C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE`
+	input := `/opt/office/bin/writer`
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

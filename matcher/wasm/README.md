@@ -20,11 +20,11 @@ All standard regex features work:
 
 ## Requirements
 
-### Build Requirements
-- [Emscripten](https://emscripten.org/) (tested with 4.0.20)
-- [Binaryen](https://github.com/WebAssembly/binaryen) (`wasm-opt` command)
-- CMake
-- Boost headers (for Vectorscan compilation)
+### Build Requirements (Docker handles all of this)
+- [Emscripten](https://emscripten.org/) 3.1.50+
+- [Binaryen](https://github.com/WebAssembly/binaryen) (`wasm-opt` for exception transformation)
+- CMake, Ragel
+- Boost headers
 
 ### Runtime Requirements
 - Go 1.23+
@@ -32,23 +32,39 @@ All standard regex features work:
 
 ## Building
 
-### Quick Build
+### Docker Build (Recommended)
+
+Use Docker to avoid installing any tooling locally:
+
+```bash
+cd matcher/wasm
+
+# Build the Docker image (one-time)
+docker build -t vectorscan-wasm .
+
+# Build WASM module
+docker run -v $(pwd):/workspace vectorscan-wasm ./build.sh nosimd
+
+# Or interactive shell for debugging
+docker run -it -v $(pwd):/workspace vectorscan-wasm bash
+```
+
+The Docker image includes:
+- Emscripten 3.1.51
+- Binaryen (wasm-opt)
+- wasmtime CLI
+- wabt tools (wasm2wat, wasm-objdump)
+- All build dependencies
+
+### Local Build (requires toolchain)
 
 ```bash
 cd matcher/wasm
 ./build.sh nosimd   # Build without SIMD (most compatible)
 # or
-./build.sh simd     # Build with WASM SIMD (faster, requires SIMD support)
+./build.sh simd     # Build with WASM SIMD (faster)
 # or
 ./build.sh all      # Build all variants
-```
-
-### Docker Build (Reproducible)
-
-```bash
-cd matcher/wasm
-docker build -t vectorscan-wasm .
-docker run -v $(pwd):/workspace vectorscan-wasm ./build.sh nosimd
 ```
 
 ### Build Variants
@@ -237,6 +253,19 @@ wasm2wat --enable-all host/matcher.wasm | grep -c "^\s*try\s"
 # Check exports
 wasm-objdump -x host/matcher.wasm | head -50
 ```
+
+## Vectorscan Patch
+
+Vectorscan requires a patch to build for WebAssembly. The patch adds WASM/Emscripten detection and enables the SIMDe backend (which is already included in Vectorscan for x86 SSE2 emulation).
+
+The patch is located at `docker/vectorscan-wasm.patch` and is automatically applied during the build if needed.
+
+**Key changes:**
+- Detects `EMSCRIPTEN` in CMakeLists.txt
+- Sets `SIMDE_BACKEND=TRUE` for WASM builds
+- Clears invalid architecture-specific compiler flags
+
+See `VECTORSCAN_PR.md` for details on submitting this patch upstream to Vectorscan.
 
 ## References
 
